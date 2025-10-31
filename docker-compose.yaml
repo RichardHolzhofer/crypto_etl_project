@@ -1,18 +1,18 @@
 version: '3.7'
 services:
   crypto_db_service:
-  image: postgres:14-alpine
-  container_name: crypto_db_container
-  environment:
-    POSTGRES_USER: ${POSTGRES_USER}
-    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    POSTGRES_DB: crypto_db
-  ports:
-    - "5433:5432"
-  volumes:
-    - crypto_db_data:/var/lib/postgresql/data
-  networks:
-    - airflow_network
+    image: postgres:14-alpine
+    container_name: crypto_db_container
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - crypto_db_data:/var/lib/postgresql/data
+    networks:
+      - airflow_network
 
 networks:
   airflow_network:
