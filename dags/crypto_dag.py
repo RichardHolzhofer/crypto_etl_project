@@ -1,8 +1,9 @@
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 from src.etl_logic import CoinGeckoPipeline
 import pendulum
 from airflow.providers.http.operators.http import HttpOperator
-from airflow.operators.email import EmailOperator
+from src.logger import logging
+import pendulum
 
 from src.constants import (
     POSTGRES_CONN_ID,
@@ -14,10 +15,17 @@ from src.constants import (
 @dag(
     start_date=pendulum.datetime(2025,10,1),
     schedule='@weekly',
-    catchup=False
+    catchup=False,
+    tags=['crypto','etl'],
+    default_args={
+        'owner': 'airflow',
+        'retries': 2,
+        'retry_delay': pendulum.duration(minutes=5)
+        }
 )
 def crypto_etl_pipeline():
 
+    logging.info("crypto_etl_pipeline DAG started")
     pipeline = CoinGeckoPipeline(conn_id=POSTGRES_CONN_ID)
     
     # Creating tables in Postgres
@@ -40,6 +48,7 @@ def crypto_etl_pipeline():
             "days": 7,
             "precision": 3
             },
+        response_check=lambda response: response.status_code == 200,
         response_filter=lambda response: response.json(),
         log_response=True
     )
@@ -54,6 +63,7 @@ def crypto_etl_pipeline():
             "days": 7,
             "precision": 3
             },
+        response_check=lambda response: response.status_code == 200,
         response_filter=lambda response: response.json(),
         log_response=True
     )
@@ -83,27 +93,36 @@ def crypto_etl_pipeline():
         pipeline.load_data_into_postgres(table_name,transformed_data)
         
     
+    
     ## Bitcoin flow
+    logging.info("Bitcoin task flow started")
     create_table_for_bitcoin_task = create_table_for_bitcoin()
     bitcoin_raw = extract_bitcoin_data.output
     bitcoin_transformed = transform_ohlc_data(bitcoin_raw)
     bitcoin_last_close = get_last_close_price(POSTGRES_BITCOIN_TABLE_NAME)
     bitcoin_with_pct = create_pct_and_day_status_cols(bitcoin_transformed, bitcoin_last_close)
     load_bitcoin = load_data_into_postgres(POSTGRES_BITCOIN_TABLE_NAME, bitcoin_with_pct)
+    logging.info("Bitcoin task flow completed")
     
     ## Ethereum flow
+    logging.info("Ethereum task flow started")
     create_table_for_ethereum_task = create_table_for_ethereum()
     ethereum_raw = extract_ethereum_data.output
     ethereum_transformed = transform_ohlc_data(ethereum_raw)
     ethereum_last_close = get_last_close_price(POSTGRES_ETHEREUM_TABLE_NAME)
     ethereum_with_pct = create_pct_and_day_status_cols(ethereum_transformed, ethereum_last_close)
     load_ethereum = load_data_into_postgres(POSTGRES_ETHEREUM_TABLE_NAME, ethereum_with_pct)
+    logging.info("Ethereum task flow completed")
+
     
     
     #Defining the task dependencies
     create_table_for_bitcoin_task >> extract_bitcoin_data >> bitcoin_transformed >> bitcoin_last_close >> bitcoin_with_pct >> load_bitcoin
     create_table_for_ethereum_task >> extract_ethereum_data >> ethereum_transformed >> ethereum_last_close >> ethereum_with_pct >> load_ethereum
-    
+
+    logging.info("crypto_etl_pipeline DAG completed")
+
+       
 dag = crypto_etl_pipeline()
 
 
