@@ -1,4 +1,4 @@
-from airflow.sdk import dag, task
+from airflow.decorators import dag, task
 from src.etl_logic import CoinGeckoPipeline
 import pendulum
 from airflow.providers.http.operators.http import HttpOperator
@@ -19,7 +19,7 @@ from src.constants import (
     tags=['crypto','etl'],
     default_args={
         'owner': 'airflow',
-        'retries': 2,
+        'retries': 1,
         'retry_delay': pendulum.duration(minutes=5)
         }
 )
@@ -68,6 +68,12 @@ def crypto_etl_pipeline():
         log_response=True
     )
     
+    #Validating the data
+    @task
+    def validate_ohlc_data(raw_data):
+        pipeline.validate_ohlc_data(raw_data)
+    
+    
     #Transforming the data
     @task
     def transform_ohlc_data(raw_data):
@@ -98,6 +104,7 @@ def crypto_etl_pipeline():
     logging.info("Bitcoin task flow started")
     create_table_for_bitcoin_task = create_table_for_bitcoin()
     bitcoin_raw = extract_bitcoin_data.output
+    bitcoin_validation = validate_ohlc_data(bitcoin_raw)
     bitcoin_transformed = transform_ohlc_data(bitcoin_raw)
     bitcoin_last_close = get_last_close_price(POSTGRES_BITCOIN_TABLE_NAME)
     bitcoin_with_pct = create_pct_and_day_status_cols(bitcoin_transformed, bitcoin_last_close)
@@ -108,6 +115,7 @@ def crypto_etl_pipeline():
     logging.info("Ethereum task flow started")
     create_table_for_ethereum_task = create_table_for_ethereum()
     ethereum_raw = extract_ethereum_data.output
+    ethereum_validation = validate_ohlc_data(ethereum_raw)
     ethereum_transformed = transform_ohlc_data(ethereum_raw)
     ethereum_last_close = get_last_close_price(POSTGRES_ETHEREUM_TABLE_NAME)
     ethereum_with_pct = create_pct_and_day_status_cols(ethereum_transformed, ethereum_last_close)
@@ -117,8 +125,8 @@ def crypto_etl_pipeline():
     
     
     #Defining the task dependencies
-    create_table_for_bitcoin_task >> extract_bitcoin_data >> bitcoin_transformed >> bitcoin_last_close >> bitcoin_with_pct >> load_bitcoin
-    create_table_for_ethereum_task >> extract_ethereum_data >> ethereum_transformed >> ethereum_last_close >> ethereum_with_pct >> load_ethereum
+    create_table_for_bitcoin_task >> extract_bitcoin_data >> bitcoin_validation >> bitcoin_transformed >> bitcoin_last_close >> bitcoin_with_pct >> load_bitcoin
+    create_table_for_ethereum_task >> extract_ethereum_data >> ethereum_validation >> ethereum_transformed >> ethereum_last_close >> ethereum_with_pct >> load_ethereum
 
     logging.info("crypto_etl_pipeline DAG completed")
 
