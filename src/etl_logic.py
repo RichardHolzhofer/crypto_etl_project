@@ -4,6 +4,9 @@ from decimal import Decimal
 import pendulum
 from src.exception import CryptoException
 from src.logger import logging
+import jsonschema
+from src.schemas import coin_ohlc_schema
+
 class CoinGeckoPipeline:
   
   def __init__(self, conn_id:str):
@@ -38,6 +41,15 @@ class CoinGeckoPipeline:
       print(f"Created table: {table_name} in {self.conn_id}")
       logging.info(f"Successfully created table: {table_name}")
       
+    except Exception as e:
+      raise CryptoException(e, sys)
+    
+  def validate_ohlc_data(self, raw_data:list):
+    try:
+      logging.info("Validation started")
+      jsonschema.validate(instance=raw_data, schema=coin_ohlc_schema)
+      logging.info("Validation has been successful")
+      return True
     except Exception as e:
       raise CryptoException(e, sys)
       
